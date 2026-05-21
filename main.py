@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 import random
 
-# ================= CONFIG (FROM GITHUB SECRETS) =================
+# ================= CONFIG (GITHUB SECRETS) =================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 BLOG_ID = os.getenv("BLOG_ID")
@@ -28,7 +28,7 @@ def save_state(state):
 def get_image():
     return "https://source.unsplash.com/800x400/?news,world"
 
-# ================= GEMINI AI =================
+# ================= AI REWRITE =================
 def ai_rewrite(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
 
@@ -36,11 +36,11 @@ def ai_rewrite(text):
         "contents": [{
             "parts": [{
                 "text": f"""
-Rewrite this news into a professional human-style article:
+Rewrite this news into a professional journalist article.
 
 Rules:
-- 2-3 paragraphs
-- natural journalism tone
+- 2–3 paragraphs
+- natural tone
 - simple English
 
 News:
@@ -58,16 +58,21 @@ News:
         print("AI ERROR:", e)
         return text
 
-# ================= HTML =================
+# ================= HTML GENERATOR (FIXED) =================
 def make_html(title, content):
-    return f"""
+
+    safe_content = content.replace("\n", "<br>")
+
+    html = f"""
     <div style="font-family:Arial;padding:10px">
         <h1>{title}</h1>
         <img src="{get_image()}" style="width:100%;border-radius:10px;">
         <hr>
-        <p style="line-height:1.6">{content.replace('\n','<br>')}</p>
+        <p style="line-height:1.6">{safe_content}</p>
     </div>
     """
+
+    return html
 
 # ================= BLOG POST =================
 def post_blog(title, content):
@@ -86,18 +91,17 @@ def post_blog(title, content):
         "status": "LIVE"
     }
 
-    print("\n========== DEBUG START ==========")
+    print("\n===== DEBUG START =====")
     print("BLOG_ID:", BLOG_ID)
-    print("TOKEN OK:", bool(ACCESS_TOKEN))
     print("TITLE:", title)
 
     try:
         res = requests.post(url, headers=headers, json=data, timeout=30)
 
         print("STATUS CODE:", res.status_code)
-        print("RESPONSE:")
-        print(res.text)
-        print("========== DEBUG END ==========\n")
+        print("RESPONSE:", res.text)
+
+        print("===== DEBUG END =====\n")
 
         return res.json()
 
@@ -117,7 +121,7 @@ if state["count"] >= 4:
     print("DAILY LIMIT REACHED")
     exit()
 
-# ================= GET NEWS =================
+# ================= NEWS FETCH =================
 feed = feedparser.parse(RSS_URL)
 
 if not feed.entries:
