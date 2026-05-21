@@ -31,7 +31,7 @@ def get_image():
     return "https://source.unsplash.com/800x400/?news,world"
 
 
-# ================= AI REWRITE =================
+# ================= AI =================
 def ai_rewrite(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
@@ -41,9 +41,9 @@ def ai_rewrite(text):
                 "text": f"""
 You are a professional journalist.
 
-Rewrite this news into a human-written article:
+Rewrite this news into a human-style article:
 - Natural tone
-- 2-3 paragraphs
+- 2–3 paragraphs
 - Clean journalism style
 
 News:
@@ -68,16 +68,19 @@ News:
         return text
 
 
-# ================= HTML =================
+# ================= HTML (FIXED f-string ERROR) =================
 def make_html(title, content):
-    return f"""
+    safe_content = content.replace("\n", "<br>")
+
+    html = f"""
     <div style="font-family:Arial;padding:10px">
         <h1>{title}</h1>
         <img src="{get_image()}" style="width:100%;border-radius:10px;">
         <hr>
-        <p style="line-height:1.6">{content.replace('\n','<br>')}</p>
+        <p style="line-height:1.6">{safe_content}</p>
     </div>
     """
+    return html
 
 
 # ================= POST TO BLOGGER =================
@@ -107,7 +110,7 @@ def post_blog(title, content):
         return {}
 
 
-# ================= DAILY LIMIT SYSTEM =================
+# ================= DAILY LIMIT =================
 state = load_state()
 today = datetime.now().strftime("%Y-%m-%d")
 
@@ -140,4 +143,4 @@ post_blog(title, article)
 state["count"] += 1
 save_state(state)
 
-print("DONE | TOTAL POSTS TODAY:", state["count"])
+print("DONE | POSTS TODAY:", state["count"])
