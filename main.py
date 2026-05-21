@@ -4,7 +4,7 @@ import requests
 import json
 from datetime import datetime
 
-# ================= CONFIG (FROM GITHUB SECRETS) =================
+# ================= CONFIG =================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 BLOG_ID = os.getenv("BLOG_ID")
@@ -38,17 +38,7 @@ def ai_rewrite(text):
     payload = {
         "contents": [{
             "parts": [{
-                "text": f"""
-You are a professional journalist.
-
-Rewrite this news into a human-style article:
-- Natural tone
-- 2–3 paragraphs
-- Clean journalism style
-
-News:
-{text}
-"""
+                "text": "Rewrite this news into a human article (2-3 paragraphs): " + text
             }]
         }]
     }
@@ -57,33 +47,36 @@ News:
         res = requests.post(url, json=payload, timeout=30)
         data = res.json()
 
-        if "candidates" not in data:
-            print("AI ERROR:", data)
-            return text
+        if "candidates" in data:
+            return data["candidates"][0]["content"]["parts"][0]["text"]
 
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        return text
 
-    except Exception as e:
-        print("AI EXCEPTION:", e)
+    except:
         return text
 
 
-# ================= HTML (FIXED f-string ERROR) =================
+# ================= HTML (SAFE VERSION) =================
 def make_html(title, content):
-    safe_content = content.replace("\n", "<br>")
+    content = content.replace("\n", "<br>")
 
-    html = f"""
+    html = """
     <div style="font-family:Arial;padding:10px">
         <h1>{title}</h1>
-        <img src="{get_image()}" style="width:100%;border-radius:10px;">
+        <img src="{img}" style="width:100%;border-radius:10px;">
         <hr>
-        <p style="line-height:1.6">{safe_content}</p>
+        <p style="line-height:1.6">{content}</p>
     </div>
-    """
+    """.format(
+        title=title,
+        img=get_image(),
+        content=content
+    )
+
     return html
 
 
-# ================= POST TO BLOGGER =================
+# ================= POST BLOG =================
 def post_blog(title, content):
     url = f"https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts/"
 
@@ -99,18 +92,14 @@ def post_blog(title, content):
 
     try:
         res = requests.post(url, headers=headers, json=data, timeout=30)
-
-        if res.status_code != 200:
-            print("BLOG ERROR:", res.text)
-
+        print(res.text)
         return res.json()
-
     except Exception as e:
-        print("BLOG EXCEPTION:", e)
+        print("POST ERROR:", e)
         return {}
 
 
-# ================= DAILY LIMIT =================
+# ================= LIMIT =================
 state = load_state()
 today = datetime.now().strftime("%Y-%m-%d")
 
@@ -119,15 +108,15 @@ if state["date"] != today:
     state["count"] = 0
 
 if state["count"] >= 4:
-    print("DAILY LIMIT REACHED")
+    print("LIMIT REACHED")
     exit()
 
 
-# ================= NEWS FETCH =================
+# ================= NEWS =================
 feed = feedparser.parse(RSS_URL)
 
 if not feed.entries:
-    print("NO NEWS FOUND")
+    print("NO NEWS")
     exit()
 
 entry = feed.entries[0]
@@ -143,4 +132,4 @@ post_blog(title, article)
 state["count"] += 1
 save_state(state)
 
-print("DONE | POSTS TODAY:", state["count"])
+print("DONE | COUNT:", state["count"])
