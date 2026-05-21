@@ -1,15 +1,16 @@
+import os
 import feedparser
 import requests
 import json
 from datetime import datetime
-import os
 
-# ================= CONFIG =================
+# ================= CONFIG (FROM GITHUB SECRETS) =================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-BLOG_ID = os.getenv("BLOG_ID")
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
+BLOG_ID = os.getenv("BLOG_ID")
 
 RSS_URL = "https://feeds.bbci.co.uk/news/rss.xml"
+
 
 # ================= STATE =================
 def load_state():
@@ -19,17 +20,20 @@ def load_state():
     except:
         return {"date": "", "count": 0}
 
+
 def save_state(state):
     with open("state.json", "w") as f:
         json.dump(state, f)
+
 
 # ================= IMAGE =================
 def get_image():
     return "https://source.unsplash.com/800x400/?news,world"
 
-# ================= AI =================
+
+# ================= AI REWRITE =================
 def ai_rewrite(text):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
     payload = {
         "contents": [{
@@ -37,10 +41,9 @@ def ai_rewrite(text):
                 "text": f"""
 You are a professional journalist.
 
-Rewrite this news into a human-style article:
-
+Rewrite this news into a human-written article:
 - Natural tone
-- 2–3 paragraphs
+- 2-3 paragraphs
 - Clean journalism style
 
 News:
@@ -53,9 +56,17 @@ News:
     try:
         res = requests.post(url, json=payload, timeout=30)
         data = res.json()
+
+        if "candidates" not in data:
+            print("AI ERROR:", data)
+            return text
+
         return data["candidates"][0]["content"]["parts"][0]["text"]
-    except:
+
+    except Exception as e:
+        print("AI EXCEPTION:", e)
         return text
+
 
 # ================= HTML =================
 def make_html(title, content):
@@ -68,7 +79,8 @@ def make_html(title, content):
     </div>
     """
 
-# ================= POST =================
+
+# ================= POST TO BLOGGER =================
 def post_blog(title, content):
     url = f"https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts/"
 
@@ -84,13 +96,18 @@ def post_blog(title, content):
 
     try:
         res = requests.post(url, headers=headers, json=data, timeout=30)
-        print(res.text)
+
+        if res.status_code != 200:
+            print("BLOG ERROR:", res.text)
+
         return res.json()
+
     except Exception as e:
-        print("POST ERROR:", e)
+        print("BLOG EXCEPTION:", e)
         return {}
 
-# ================= DAILY LIMIT =================
+
+# ================= DAILY LIMIT SYSTEM =================
 state = load_state()
 today = datetime.now().strftime("%Y-%m-%d")
 
@@ -102,17 +119,19 @@ if state["count"] >= 4:
     print("DAILY LIMIT REACHED")
     exit()
 
-# ================= NEWS =================
+
+# ================= NEWS FETCH =================
 feed = feedparser.parse(RSS_URL)
 
 if not feed.entries:
-    print("NO NEWS")
+    print("NO NEWS FOUND")
     exit()
 
 entry = feed.entries[0]
 
 title = entry.title
-summary = entry.summary
+summary = getattr(entry, "summary", "")
+
 
 # ================= RUN =================
 article = ai_rewrite(title + " " + summary)
@@ -121,4 +140,4 @@ post_blog(title, article)
 state["count"] += 1
 save_state(state)
 
-print("DONE | POSTS TODAY:", state["count"])
+print("DONE | TOTAL POSTS TODAY:", state["count"])
