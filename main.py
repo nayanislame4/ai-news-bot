@@ -3,15 +3,47 @@ import requests
 import os
 import random
 
-# ================= ENV =================
+# ================= CONFIG =================
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 BLOG_ID = os.getenv("BLOG_ID")
+
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
 
 RSS_URL = "https://feeds.bbci.co.uk/news/rss.xml"
 
 
-# ================= NEWS FETCH =================
+# ================= GET ACCESS TOKEN =================
+
+def get_access_token():
+    url = "https://oauth2.googleapis.com/token"
+
+    data = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "refresh_token": REFRESH_TOKEN,
+        "grant_type": "refresh_token"
+    }
+
+    try:
+        res = requests.post(url, data=data, timeout=30)
+        token_data = res.json()
+
+        if "access_token" not in token_data:
+            print("TOKEN ERROR RESPONSE:", token_data)
+            return None
+
+        return token_data["access_token"]
+
+    except Exception as e:
+        print("TOKEN ERROR:", e)
+        return None
+
+
+# ================= GET RANDOM NEWS =================
+
 feed = feedparser.parse(RSS_URL)
 
 if not feed.entries:
@@ -20,99 +52,123 @@ if not feed.entries:
 
 entry = random.choice(feed.entries)
 
-title = entry.title
-summary = entry.summary
+title = entry.get("title", "No Title")
+summary = entry.get("summary", "")
 
 print("SELECTED NEWS:", title)
 
 
 # ================= IMAGE =================
-def get_image(query="news world"):
+
+def get_image(query="news"):
     return f"https://source.unsplash.com/1200x600/?{query}"
 
 
-# ================= AI REWRITE =================
+# ================= GEMINI AI =================
+
 def ai_rewrite(text):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
+
+    if not GEMINI_API_KEY:
+        return text
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
 
     payload = {
-        "contents": [{
-            "parts": [{
-                "text": "Rewrite this news into a professional 2 paragraph article:\n\n" + text
-            }]
-        }]
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": f"Rewrite this into a professional news article:\n\n{text}"
+                    }
+                ]
+            }
+        ]
     }
 
     try:
-        res = requests.post(url, json=payload, timeout=30)
-        data = res.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        res = requests.post(url, json=payload, timeout=60)
+        result = res.json()
+
+        return result["candidates"][0]["content"]["parts"][0]["text"]
+
     except Exception as e:
-        print("AI ERROR:", e)
+        print("GEMINI ERROR:", e)
         return text
 
 
-# ================= HTML BUILDER =================
+# ================= HTML =================
+
 def make_html(title, content):
 
-    image_url = get_image("news,world")
+    image = get_image("world news")
 
-    clean_content = content.replace("\n", "<br>")
+    clean = content.replace("\n", "<br>")
 
-    html = f"""
-    <div style="font-family:Arial;max-width:800px;margin:auto;padding:15px;">
+    return f"""
+    <div style="font-family:Arial;padding:20px;max-width:800px;margin:auto;">
 
-        <h1 style="color:#222;">{title}</h1>
+        <h1 style="color:#111;">{title}</h1>
 
-        <img src="{image_url}" style="width:100%;border-radius:12px;margin:10px 0;" />
+        <img src="{image}"
+        style="width:100%;border-radius:12px;margin:15px 0;">
 
-        <div style="font-size:16px;line-height:1.7;color:#333;">
-            {clean_content}
+        <div style="font-size:18px;line-height:1.8;color:#333;">
+            {clean}
         </div>
 
         <hr>
 
-        <p style="font-size:12px;color:gray;">AI Generated News Article</p>
+        <p style="color:gray;font-size:12px;">
+            AI Generated News
+        </p>
 
     </div>
     """
 
-    return html
 
+# ================= BLOGGER POST =================
 
-# ================= POST TO BLOGGER =================
 def post_blog(title, content):
 
-    if not BLOG_ID or not ACCESS_TOKEN:
-        print("MISSING ENV VARIABLES")
+    access_token = get_access_token()
+
+    if not access_token:
+        print("FAILED TO GET ACCESS TOKEN")
         return
 
-    url = f"https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts/"
+    url = f"https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts"
 
     headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
     }
 
     data = {
         "title": title,
         "content": make_html(title, content),
-        "status": "LIVE"
+        "status": "published"
     }
 
     try:
-        res = requests.post(url, headers=headers, json=data, timeout=30)
-        print("STATUS CODE:", res.status_code)
-        print("RESPONSE:", res.text)
+        res = requests.post(url, headers=headers, json=data, timeout=60)
+
+        print("BLOG STATUS:", res.status_code)
+        print("BLOG RESPONSE:", res.text)
+
     except Exception as e:
-        print("POST ERROR:", e)
+        print("BLOG ERROR:", e)
 
 
 # ================= RUN =================
-print("BOT STARTED")
 
-article = ai_rewrite(title + " " + summary)
+def main():
+    print("BOT STARTED")
 
-post_blog(title, article)
+    article = ai_rewrite(title + "\n\n" + summary)
 
-print("DONE")
+    post_blog(title, article)
+
+    print("DONE")
+
+
+main()
