@@ -15,7 +15,7 @@ REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
 RSS_URL = "https://feeds.bbci.co.uk/news/rss.xml"
 
 
-# ================= GET ACCESS TOKEN =================
+# ================= ACCESS TOKEN =================
 
 def get_access_token():
     url = "https://oauth2.googleapis.com/token"
@@ -27,22 +27,18 @@ def get_access_token():
         "grant_type": "refresh_token"
     }
 
-    try:
-        res = requests.post(url, data=data, timeout=30)
-        token_data = res.json()
+    res = requests.post(url, data=data)
 
-        if "access_token" not in token_data:
-            print("TOKEN ERROR RESPONSE:", token_data)
-            return None
+    token = res.json()
 
-        return token_data["access_token"]
-
-    except Exception as e:
-        print("TOKEN ERROR:", e)
+    if "access_token" not in token:
+        print("TOKEN ERROR:", token)
         return None
 
+    return token["access_token"]
 
-# ================= GET RANDOM NEWS =================
+
+# ================= NEWS =================
 
 feed = feedparser.parse(RSS_URL)
 
@@ -52,123 +48,80 @@ if not feed.entries:
 
 entry = random.choice(feed.entries)
 
-title = entry.get("title", "No Title")
+title = entry.title
 summary = entry.get("summary", "")
 
-print("SELECTED NEWS:", title)
+print("SELECTED:", title)
 
 
-# ================= IMAGE =================
+# ================= GEMINI =================
 
-def get_image(query="news"):
-    return f"https://source.unsplash.com/1200x600/?{query}"
-
-
-# ================= GEMINI AI =================
-
-def ai_rewrite(text):
-
-    if not GEMINI_API_KEY:
-        return text
-
+def ai(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
 
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": f"Rewrite this into a professional news article:\n\n{text}"
-                    }
-                ]
-            }
-        ]
+        "contents": [{
+            "parts": [{
+                "text": f"Write a professional news article:\n\n{text}"
+            }]
+        }]
     }
 
+    res = requests.post(url, json=payload)
+    data = res.json()
+
     try:
-        res = requests.post(url, json=payload, timeout=60)
-        result = res.json()
-
-        return result["candidates"][0]["content"]["parts"][0]["text"]
-
-    except Exception as e:
-        print("GEMINI ERROR:", e)
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except:
+        print("GEMINI ERROR:", data)
         return text
 
 
 # ================= HTML =================
 
-def make_html(title, content):
-
-    image = get_image("world news")
-
-    clean = content.replace("\n", "<br>")
-
+def html(title, content):
     return f"""
-    <div style="font-family:Arial;padding:20px;max-width:800px;margin:auto;">
-
-        <h1 style="color:#111;">{title}</h1>
-
-        <img src="{image}"
-        style="width:100%;border-radius:12px;margin:15px 0;">
-
-        <div style="font-size:18px;line-height:1.8;color:#333;">
-            {clean}
-        </div>
-
-        <hr>
-
-        <p style="color:gray;font-size:12px;">
-            AI Generated News
-        </p>
-
+    <div style="font-family:Arial;max-width:800px;margin:auto;padding:20px">
+        <h1>{title}</h1>
+        <p style="line-height:1.7">{content.replace("\n", "<br>")}</p>
     </div>
     """
 
 
-# ================= BLOGGER POST =================
+# ================= POST BLOG =================
 
-def post_blog(title, content):
+def post(title, content):
+    token = get_access_token()
 
-    access_token = get_access_token()
-
-    if not access_token:
-        print("FAILED TO GET ACCESS TOKEN")
+    if not token:
+        print("NO ACCESS TOKEN")
         return
 
-    url = f"https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts"
+    url = f"https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts/"
 
     headers = {
-        "Authorization": f"Bearer {access_token}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
     data = {
         "title": title,
-        "content": make_html(title, content),
-        "status": "published"
+        "content": html(title, content),
+        "isDraft": False
     }
 
-    try:
-        res = requests.post(url, headers=headers, json=data, timeout=60)
+    res = requests.post(url, headers=headers, json=data)
 
-        print("BLOG STATUS:", res.status_code)
-        print("BLOG RESPONSE:", res.text)
-
-    except Exception as e:
-        print("BLOG ERROR:", e)
+    print("STATUS:", res.status_code)
+    print("RESPONSE:", res.text)
 
 
 # ================= RUN =================
 
-def main():
-    print("BOT STARTED")
+print("BOT START")
 
-    article = ai_rewrite(title + "\n\n" + summary)
+article = ai(title + "\n\n" + summary)
 
-    post_blog(title, article)
+post(title, article)
 
-    print("DONE")
-
-
-main()
+print("DONE")
